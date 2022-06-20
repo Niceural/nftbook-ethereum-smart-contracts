@@ -3,7 +3,7 @@
     "useTabs": false,
     "semi": true,
     "singleQuote": false,
-    "printWidth": 99,
+    "printWidth": 80,
     "overrides": [
         {
             "files": "*.test.js",
