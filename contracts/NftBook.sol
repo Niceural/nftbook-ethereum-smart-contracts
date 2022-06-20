@@ -7,20 +7,70 @@ import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 error NftBook__NotApprovedForMarketplace();
 error NftBook__ItemAlreadyListed(address nftAddress, uint256 tokenId);
 error NftBook__NotOwner();
-error NftBool__PriceNotMet(address nftAddress, uint256 tokenId, uint256 price);
-
-// error NftBook__NotListed(address nftAddress, uint256 tokenId);
-// error NftBook__PriceNotMet(address nftAddress, uint256 tokenid, uint256 price);
+error NftBool__PriceNotMet(
+    address nftAddress,
+    uint256 tokenId,
+    uint256 minPrice
+);
+error NftBook__NoProceeds();
+error NftBook__ItemNotListed(address nftAddress, uint256 tokenId);
 
 contract NftBook is INftBook {
     //=====================================================================================
     //                                                                      state variables
     //=====================================================================================
-    // NFT contract address -> NFT tokenId -> Listing (price and seller)
+    // NFT contract address -> NFT tokenId -> INftBook.ItemListing
     mapping(address => mapping(uint256 => ItemListing)) private s_listings;
-
     // Seller address -> amount earned
-    // mapping(address => uint256) private s_proceeds;
+    mapping(address => uint256) private s_proceeds;
+
+    //=====================================================================================
+    //                                                                            modifiers
+    //=====================================================================================
+    modifier notListed(address nftAddress, uint256 tokenId) {
+        _notListed(nftAddress, tokenId);
+        _;
+    }
+
+    function _notListed(address nftAddress, uint256 tokenId) internal view {
+        uint256 state = s_listings[nftAddress][tokenId].state;
+        if (state != 0) {
+            revert NftBook__ItemAlreadyListed(nftAddress, tokenId);
+        }
+    }
+
+    modifier isListed(address nftAddress, uint256 tokenId) {
+        _isListed(nftAddress, tokenId);
+        _;
+    }
+
+    function _isListed(address nftAddress, uint256 tokenId) internal view {
+        uint256 state = s_listings[nftAddress][tokenId].state;
+        if (state == 0) {
+            revert NftBook__ItemNotListed(nftAddress, tokenId);
+        }
+    }
+
+    modifier isOwner(
+        address nftAddress,
+        address spender,
+        uint256 tokenId
+    ) {
+        _isOwner(nftAddress, spender, tokenId);
+        _;
+    }
+
+    function _isOwner(
+        address nftAddress,
+        address spender,
+        uint256 tokenId
+    ) internal view {
+        IERC721 nft = IERC721(nftAddress);
+        address owner = nft.ownerOf(tokenId);
+        if (spender != owner) {
+            revert NftBook__NotOwner();
+        }
+    }
 
     //=====================================================================================
     //                                                                       main functions
@@ -35,12 +85,12 @@ contract NftBook is INftBook {
     function listSalableItem(
         address nftAddress,
         uint256 tokenId,
-        uint256 price
+        uint256 minPrice
     ) external override {
         ItemListing memory listing = ItemListing(
             address(0),
             msg.sender,
-            price,
+            minPrice,
             2
         );
         _listItem(nftAddress, tokenId, listing);
@@ -50,27 +100,24 @@ contract NftBook is INftBook {
         address nftAddress,
         uint256 tokenId,
         ItemListing memory listing
-    ) internal {
-        // reverts if the item is already listed
-        uint256 state = s_listings[nftAddress][tokenId].state;
-        if (state != 0) {
-            revert NftBook__ItemAlreadyListed(nftAddress, tokenId);
-        }
-        // reverts if the msg.sender is not the owner of the item
-        IERC721 nft = IERC721(nftAddress);
-        if (listing.owner != nft.ownerOf(tokenId)) {
-            revert NftBook__NotOwner();
-        }
+    )
+        internal
+        notListed(nftAddress, tokenId)
+        isOwner(nftAddress, msg.sender, tokenId)
+    {
         // reverts if the NFT is salable and the owner has not approve this contract to transfer the NFT
-        if ((state == 2) && (nft.getApproved(tokenId) != address(this))) {
+        IERC721 nft = IERC721(nftAddress);
+        if (
+            (listing.state == 2) && (nft.getApproved(tokenId) != address(this))
+        ) {
             revert NftBook__NotApprovedForMarketplace();
         }
 
         s_listings[nftAddress][tokenId] = listing;
-        emit ItemListed(listing.owner, nftAddress, tokenId, listing.price);
+        emit ItemListed(listing.owner, nftAddress, tokenId, listing.minPrice);
     }
 
-    function unlistItem(address nftAddress, uint256 tokenId) external override {
+    function cancelItem(address nftAddress, uint256 tokenId) external override {
         ItemListing memory listing = s_listings[nftAddress][tokenId];
         // reverts if the item is not listed
         if (listing.state == 0) {
@@ -83,7 +130,7 @@ contract NftBook is INftBook {
         }
 
         delete (s_listings[nftAddress][tokenId]);
-        emit ItemUnlisted(listing.owner, nftAddress, tokenId);
+        emit ItemCanceled(listing.owner, nftAddress, tokenId);
     }
 
     function makeItemUnsalable(address nftAddress, uint256 tokenId)
@@ -108,7 +155,7 @@ contract NftBook is INftBook {
     function makeItemSalable(
         address nftAddress,
         uint256 tokenId,
-        uint256 price
+        uint256 minPrice
     ) external override {
         ItemListing memory listing = s_listings[nftAddress][tokenId];
         // reverts if the item is not listed
@@ -122,11 +169,12 @@ contract NftBook is INftBook {
         }
 
         listing.state = 2;
-        listing.price = price;
+        listing.minPrice = minPrice;
         s_listings[nftAddress][tokenId] = listing;
     }
 
     /// @notice
+    // pb with proceeds
     function buyItem(address nftAddress, uint256 tokenId)
         external
         payable
@@ -138,21 +186,51 @@ contract NftBook is INftBook {
             revert NftBook__ItemAlreadyListed(nftAddress, tokenId);
         }
         // reverts if not enough funds transferred
-        if (msg.value < listing.price) {
-            revert NftBool__PriceNotMet(nftAddress, tokenId, listing.price);
+        if (msg.value < listing.minPrice) {
+            revert NftBool__PriceNotMet(nftAddress, tokenId, listing.minPrice);
         }
 
+        s_proceeds[listing.owner] += msg.value;
         address seller = listing.owner;
         listing.state = 1;
         listing.owner = msg.sender;
         s_listings[nftAddress][tokenId] = listing;
 
         IERC721(nftAddress).safeTransferFrom(seller, listing.owner, tokenId);
-        emit ItemBought(listing.owner, nftAddress, tokenId, listing.price);
+        emit ItemBought(listing.owner, nftAddress, tokenId, listing.minPrice);
+    }
+
+    function withdrawProceeds() external override {
+        uint256 proceeds = s_proceeds[msg.sender];
+        if (proceeds <= 0) {
+            revert NftBook__NoProceeds();
+        }
+
+        s_proceeds[msg.sender] = 0;
+        (bool success, ) = payable(msg.sender).call{value: proceeds}("");
+        require(success, "Transfer failed");
+    }
+
+    function getItemListing(address nftAddress, uint256 tokenId)
+        external
+        view
+        override
+        returns (ItemListing memory)
+    {
+        return s_listings[nftAddress][tokenId];
+    }
+
+    function getProceeds(address seller)
+        external
+        view
+        override
+        returns (uint256)
+    {
+        return s_proceeds[seller];
     }
 }
 
 /* notes:
-    - if lists an nft with a price of 0, must have a way to modify the price
+    - if lists an nft with a minPrice of 0, must have a way to modify the minPrice
     - when sells an nft only appears on the creator and owner's account
 */

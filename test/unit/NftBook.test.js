@@ -24,27 +24,61 @@ const { developmentChains } = require("../../helper-hardhat-config");
         await basicNft.approve(cNftBook.address, TOKEN_ID);
       });
 
-      describe("listItem", function () {
-        it("returns true if item is listed", async function () {
-          const res = await nftBook.callStatic.listItem(
+      describe("listItem", function () {});
+
+      describe("listSalableItem", function () {
+        it("emits an event on listing", async function () {
+          const tx = await nftBook.listSalableItem(
+            basicNft.address,
+            TOKEN_ID,
+            PRICE
+          );
+          expect(tx).to.emit("ItemListed");
+        });
+        it("reverts if already listed", async function () {
+          await nftBook.listSalableItem(basicNft.address, TOKEN_ID, PRICE);
+          const error = `NftBook__ItemAlreadyListed("${basicNft.address}", ${TOKEN_ID})`;
+          await expect(
+            nftBook.listSalableItem(basicNft.address, TOKEN_ID, PRICE)
+          ).to.be.revertedWith(error);
+        });
+        it("reverts if not owner", async function () {
+          nftBook = cNftBook.connect(user);
+          await basicNft.approve(user.address, TOKEN_ID);
+          await expect(
+            nftBook.listSalableItem(basicNft.address, TOKEN_ID, PRICE)
+          ).to.be.revertedWith("NftBook__NotOwner");
+        });
+        it("reverts if NFT Book is not approved to transfer the token", async function () {
+          await basicNft.approve(ethers.constants.AddressZero, TOKEN_ID);
+          await expect(
+            nftBook.listSalableItem(basicNft.address, TOKEN_ID, PRICE)
+          ).to.be.revertedWith("NftBook__NotApprovedForMarketplace");
+        });
+        it("sets the ItemListing correctly", async function () {
+          await nftBook.listSalableItem(basicNft.address, TOKEN_ID, PRICE);
+          const listing = await nftBook.getItemListing(
             basicNft.address,
             TOKEN_ID
           );
-          assert(res);
+          assert.equal(listing.owner.toString(), deployer.address);
+          assert.equal(listing.minPrice.toString(), PRICE.toString());
+          assert.equal(listing.state.toString(), "2");
         });
-        it("emits an event after listing an item", async function () {
-          const tx = await nftBook.listItem(basicNft.address, TOKEN_ID);
-          expect(tx).to.emit("ItemListed");
-        });
-        it("reverts if item is already listed", async function () {
-          await nftBook.listItem(basicNft.address, TOKEN_ID, PRICE);
-          await expect(
-            nftBook.listItem(basicNft.address, TOKEN_ID, PRICE)
-          ).to.be.revertedWith("NftBook__ItemAlreadyListed");
-          /*const error = `NftBook__ItemAlreadyListed("${basicNft.address}", ${TOKEN_ID})`;
-          await expect(
-            nftBook.listItem(basicNft.address, TOKEN_ID, PRICE)
-          ).to.be.revertedWith(error);*/
-        });
+        it("sets price to 0 for a negative price entered", async function () {});
+        it("sets price to max uint256 for a price larger than max uint256", async function () {});
       });
+
+      describe("cancelItem", function () {
+        it("reverts if not owner", async function () {});
+        it("reverts if not listed", async function () {});
+        it("emits an event when item is canceled", async function () {});
+        it("correctly modifier the state of the NFT", async function () {});
+      });
+
+      describe("makeItemUnsalable", function () {});
+
+      describe("makeItemSalable", function () {});
+
+      describe("buyItem", function () {});
     });

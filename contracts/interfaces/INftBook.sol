@@ -7,7 +7,7 @@ interface INftBook {
     struct ItemListing {
         address creator;
         address owner;
-        uint256 price;
+        uint256 minPrice;
         uint256 state; // 0: not listed, 1: listed not salable, 2: listed salable
     }
 
@@ -15,16 +15,16 @@ interface INftBook {
         address indexed owner,
         address indexed nftAddress,
         uint256 indexed tokenId,
-        uint256 price
+        uint256 minPrice
     );
 
-    event ItemUnlisted(address owner, address nftAddress, uint256 tokenId);
+    event ItemCanceled(address owner, address nftAddress, uint256 tokenId);
 
     event ItemBought(
         address indexed buyer,
         address indexed nftAddress,
         uint256 indexed tokenId,
-        uint256 price
+        uint256 minPrice
     );
 
     /// @notice Lists an NFT which cannot be bought
@@ -34,11 +34,11 @@ interface INftBook {
     function listSalableItem(
         address nftAddress,
         uint256 tokenId,
-        uint256 price
+        uint256 minPrice
     ) external;
 
     /// @notice Cancel a listing from NFT book
-    function unlistItem(address nftAddress, uint256 tokenId) external;
+    function cancelItem(address nftAddress, uint256 tokenId) external;
 
     /// @notice
     function makeItemUnsalable(address nftAddress, uint256 tokenId) external;
@@ -47,9 +47,20 @@ interface INftBook {
     function makeItemSalable(
         address nftAddress,
         uint256 tokenId,
-        uint256 price
+        uint256 minPrice
     ) external;
 
     /// @notice
     function buyItem(address nftAddress, uint256 tokenId) external payable;
+
+    function withdrawProceeds() external;
+
+    /// @notice
+    function getItemListing(address nftAddress, uint256 tokenId)
+        external
+        view
+        returns (ItemListing memory);
+
+    /// @notice
+    function getProceeds(address seller) external view returns (uint256);
 }
