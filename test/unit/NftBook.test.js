@@ -25,7 +25,7 @@ const { developmentChains } = require("../../helper-hardhat-config");
       });
 
       describe("listItem", function () {
-        it("returns true is item if listed", async function () {
+        it("returns true if item is listed", async function () {
           const res = await nftBook.callStatic.listItem(
             basicNft.address,
             TOKEN_ID
@@ -35,6 +35,16 @@ const { developmentChains } = require("../../helper-hardhat-config");
         it("emits an event after listing an item", async function () {
           const tx = await nftBook.listItem(basicNft.address, TOKEN_ID);
           expect(tx).to.emit("ItemListed");
+        });
+        it("reverts if item is already listed", async function () {
+          await nftBook.listItem(basicNft.address, TOKEN_ID, PRICE);
+          await expect(
+            nftBook.listItem(basicNft.address, TOKEN_ID, PRICE)
+          ).to.be.revertedWith("NftBook__ItemAlreadyListed");
+          /*const error = `NftBook__ItemAlreadyListed("${basicNft.address}", ${TOKEN_ID})`;
+          await expect(
+            nftBook.listItem(basicNft.address, TOKEN_ID, PRICE)
+          ).to.be.revertedWith(error);*/
         });
       });
     });

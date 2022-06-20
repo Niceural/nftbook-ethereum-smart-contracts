@@ -4,12 +4,13 @@ pragma solidity ^0.8.7;
 import "./interfaces/INftBook.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
-error NftMarketplace__NotApprovedForMarketplace();
-error NftMarketplace__ItemAlreadyListed(address nftAddress, uint256 tokenId);
-error NftMarketplace__NotOwner();
+error NftBook__NotApprovedForMarketplace();
+error NftBook__ItemAlreadyListed(address nftAddress, uint256 tokenId);
+error NftBook__NotOwner();
+error NftBool__PriceNotMet(address nftAddress, uint256 tokenId, uint256 price);
 
-// error NftMarketplace__NotListed(address nftAddress, uint256 tokenId);
-// error NftMarketplace__PriceNotMet(address nftAddress, uint256 tokenid, uint256 price);
+// error NftBook__NotListed(address nftAddress, uint256 tokenId);
+// error NftBook__PriceNotMet(address nftAddress, uint256 tokenid, uint256 price);
 
 contract NftBook is INftBook {
     //=====================================================================================
@@ -25,20 +26,9 @@ contract NftBook is INftBook {
     //                                                                       main functions
     //=====================================================================================
     /// @inheritdoc INftBook
-    function listItem(address nftAddress, uint256 tokenId)
-        external
-        override
-        returns (bool success)
-    {
-        ItemListing memory listing = ItemListing(
-            address(0),
-            msg.sender,
-            0,
-            true,
-            false
-        );
+    function listItem(address nftAddress, uint256 tokenId) external override {
+        ItemListing memory listing = ItemListing(address(0), msg.sender, 0, 1);
         _listItem(nftAddress, tokenId, listing);
-        return true;
     }
 
     /// @inheritdoc INftBook
@@ -46,16 +36,14 @@ contract NftBook is INftBook {
         address nftAddress,
         uint256 tokenId,
         uint256 price
-    ) external override returns (bool success) {
+    ) external override {
         ItemListing memory listing = ItemListing(
             address(0),
             msg.sender,
             price,
-            true,
-            true
+            2
         );
         _listItem(nftAddress, tokenId, listing);
-        return true;
     }
 
     function _listItem(
@@ -64,40 +52,104 @@ contract NftBook is INftBook {
         ItemListing memory listing
     ) internal {
         // reverts if the item is already listed
-        bool listed = s_listings[nftAddress][tokenId].isListed;
-        if (listed) {
-            revert NftMarketplace__ItemAlreadyListed(nftAddress, tokenId);
+        uint256 state = s_listings[nftAddress][tokenId].state;
+        if (state != 0) {
+            revert NftBook__ItemAlreadyListed(nftAddress, tokenId);
         }
         // reverts if the msg.sender is not the owner of the item
         IERC721 nft = IERC721(nftAddress);
         if (listing.owner != nft.ownerOf(tokenId)) {
-            revert NftMarketplace__NotOwner();
+            revert NftBook__NotOwner();
         }
         // reverts if the NFT is salable and the owner has not approve this contract to transfer the NFT
-        if (
-            (listing.isSalable) && (nft.getApproved(tokenId) != address(this))
-        ) {
-            revert NftMarketplace__NotApprovedForMarketplace();
+        if ((state == 2) && (nft.getApproved(tokenId) != address(this))) {
+            revert NftBook__NotApprovedForMarketplace();
         }
 
         s_listings[nftAddress][tokenId] = listing;
         emit ItemListed(listing.owner, nftAddress, tokenId, listing.price);
     }
 
-    /*function buyItem(address nftAddress, uint256 tokenId)
-        external
-        payable
-        isListed(nftAddress, tokenId)
-    {
-        Listing memory listedItem = s_listings[nftAddress][tokenId];
-        if (msg.value < listedItem.price) {
-            revert NftMarketplace__PriceNotMet(nftAddress, tokenId, listedItem.price);
+    function unlistItem(address nftAddress, uint256 tokenId) external override {
+        ItemListing memory listing = s_listings[nftAddress][tokenId];
+        // reverts if the item is not listed
+        if (listing.state == 0) {
+            revert NftBook__ItemAlreadyListed(nftAddress, tokenId);
+        }
+        // reverts if the msg.sender is not the owner of the item
+        IERC721 nft = IERC721(nftAddress);
+        if (listing.owner != nft.ownerOf(tokenId)) {
+            revert NftBook__NotOwner();
         }
 
-        s_proceeds[listedItem.seller] += msg.value;
         delete (s_listings[nftAddress][tokenId]);
-        IERC721(nftAddress).transferFrom(listedItem.seller, msg.sender, tokenId);
-    }*/
+        emit ItemUnlisted(listing.owner, nftAddress, tokenId);
+    }
+
+    function makeItemUnsalable(address nftAddress, uint256 tokenId)
+        external
+        override
+    {
+        ItemListing memory listing = s_listings[nftAddress][tokenId];
+        // reverts if the item is not listed
+        if (listing.state == 0) {
+            revert NftBook__ItemAlreadyListed(nftAddress, tokenId);
+        }
+        // reverts if the msg.sender is not the owner of the item
+        IERC721 nft = IERC721(nftAddress);
+        if (listing.owner != nft.ownerOf(tokenId)) {
+            revert NftBook__NotOwner();
+        }
+
+        s_listings[nftAddress][tokenId].state = 1;
+    }
+
+    /// @notice
+    function makeItemSalable(
+        address nftAddress,
+        uint256 tokenId,
+        uint256 price
+    ) external override {
+        ItemListing memory listing = s_listings[nftAddress][tokenId];
+        // reverts if the item is not listed
+        if (listing.state == 0) {
+            revert NftBook__ItemAlreadyListed(nftAddress, tokenId);
+        }
+        // reverts if the msg.sender is not the owner of the item
+        IERC721 nft = IERC721(nftAddress);
+        if (listing.owner != nft.ownerOf(tokenId)) {
+            revert NftBook__NotOwner();
+        }
+
+        listing.state = 2;
+        listing.price = price;
+        s_listings[nftAddress][tokenId] = listing;
+    }
+
+    /// @notice
+    function buyItem(address nftAddress, uint256 tokenId)
+        external
+        payable
+        override
+    {
+        ItemListing memory listing = s_listings[nftAddress][tokenId];
+        // reverts if the item is not listed
+        if (listing.state == 0) {
+            revert NftBook__ItemAlreadyListed(nftAddress, tokenId);
+        }
+        // reverts if not enough funds transferred
+        if (msg.value < listing.price) {
+            revert NftBool__PriceNotMet(nftAddress, tokenId, listing.price);
+        }
+
+        address seller = listing.owner;
+        listing.state = 1;
+        listing.owner = msg.sender;
+        s_listings[nftAddress][tokenId] = listing;
+
+        IERC721(nftAddress).safeTransferFrom(seller, listing.owner, tokenId);
+        emit ItemBought(listing.owner, nftAddress, tokenId, listing.price);
+    }
 }
 
 /* notes:
