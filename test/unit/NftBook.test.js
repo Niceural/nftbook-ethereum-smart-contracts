@@ -247,22 +247,43 @@ const { developmentChains } = require("../../helper-hardhat-config");
           assert.equal(listing.owner.toString(), user.address);
         });
         it("sets the proceeds to the correct value", async function () {
-          const proceedsBefore = await ethers.BigNumber.from(
-            nftBook.getProceeds(deployer.address)
+          const proceedsBefore = ethers.BigNumber.from(
+            await nftBook.getProceeds(deployer.address)
           );
           await nftBook.listSalableItem(basicNft.address, TOKEN_ID, PRICE);
           nftBook = cNftBook.connect(user);
           await nftBook.buyItem(basicNft.address, TOKEN_ID, { value: PRICE });
-          const proceedsAfter = await ethers.BigNumber.from(
-            nftBook.getProceeds(deployer.address)
+          const proceedsAfter = ethers.BigNumber.from(
+            await nftBook.getProceeds(deployer.address)
           );
           const expectedProceeds = proceedsBefore.add(PRICE);
-          assert.equal(proceedsAfter, expectedProceeds);
+          assert(proceedsAfter.eq(expectedProceeds));
         });
       });
 
       describe("withdrawProceeds", function () {
-        it("reverts if proceeds is 0", async function () {});
-        it("sets the proceeds to 0 just before transfer", async function () {});
+        it("reverts if proceeds is 0", async function () {
+          const error = "NftBook__NoProceeds";
+          await expect(nftBook.withdrawProceeds()).to.be.revertedWith(error);
+        });
+        it("correctly sets the proceeds", async function () {
+          await nftBook.listSalableItem(basicNft.address, TOKEN_ID, PRICE);
+          nftBook = cNftBook.connect(user);
+          await nftBook.buyItem(basicNft.address, TOKEN_ID, { value: PRICE });
+          const proceeds = ethers.BigNumber.from(
+            await nftBook.getProceeds(deployer.address)
+          );
+          const expectedProceeds = ethers.BigNumber.from(PRICE);
+          assert(proceeds.eq(expectedProceeds));
+        });
+        it("sets the proceeds to 0 after withdrawal", async function () {
+          await nftBook.listSalableItem(basicNft.address, TOKEN_ID, PRICE);
+          nftBook = cNftBook.connect(user);
+          await nftBook.buyItem(basicNft.address, TOKEN_ID, { value: PRICE });
+          nftBook = cNftBook.connect(deployer);
+          await nftBook.withdrawProceeds();
+          const finalProceeds = await nftBook.getProceeds(deployer.address);
+          assert.equal(finalProceeds, "0");
+        });
       });
     });
