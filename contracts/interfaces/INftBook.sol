@@ -15,10 +15,15 @@ interface INftBook {
         address indexed owner,
         address indexed nftAddress,
         uint256 indexed tokenId,
-        uint256 minPrice
+        uint256 minPrice,
+        uint256 state
     );
 
-    event ItemCanceled(address owner, address nftAddress, uint256 tokenId);
+    event ItemListingCanceled(
+        address owner,
+        address nftAddress,
+        uint256 tokenId
+    );
 
     event ItemBought(
         address indexed buyer,
@@ -38,7 +43,7 @@ interface INftBook {
     ) external;
 
     /// @notice Cancel a listing from NFT book
-    function cancelItem(address nftAddress, uint256 tokenId) external;
+    function cancelItemListing(address nftAddress, uint256 tokenId) external;
 
     /// @notice
     function makeItemUnsalable(address nftAddress, uint256 tokenId) external;
