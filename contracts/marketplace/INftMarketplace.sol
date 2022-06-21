@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 /// @title NFT Book allows the user to list, sell, buy NFTs
 /// @author Nicolas Bayle
-interface INftBook {
+interface INftMarketplace {
     struct ItemListing {
         address creator;
         address owner;

@@ -1,25 +1,25 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.7;
 
-import "./INftBook.sol";
+import "./INftMarketplace.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
-error NftBook__NotApprovedForMarketplace();
-error NftBook__ItemAlreadyListed(address nftAddress, uint256 tokenId);
-error NftBook__NotOwner();
-error NftBook__PriceNotMet(
+error NftMarketplace__NotApprovedForMarketplace();
+error NftMarketplace__ItemAlreadyListed(address nftAddress, uint256 tokenId);
+error NftMarketplace__NotOwner();
+error NftMarketplace__PriceNotMet(
     address nftAddress,
     uint256 tokenId,
     uint256 minPrice
 );
-error NftBook__NoProceeds();
-error NftBook__ItemNotListed(address nftAddress, uint256 tokenId);
+error NftMarketplace__NoProceeds();
+error NftMarketplace__ItemNotListed(address nftAddress, uint256 tokenId);
 
-contract NftBook is INftBook {
+contract NftMarketplace is INftMarketplace {
     //=====================================================================================
     //                                                                      state variables
     //=====================================================================================
-    // NFT contract address -> NFT tokenId -> INftBook.ItemListing
+    // NFT contract address -> NFT tokenId -> INftMarketplace.ItemListing
     mapping(address => mapping(uint256 => ItemListing)) private s_listings;
     // Seller address -> amount earned
     mapping(address => uint256) private s_proceeds;
@@ -35,7 +35,7 @@ contract NftBook is INftBook {
     function _notListed(address nftAddress, uint256 tokenId) internal view {
         uint256 state = s_listings[nftAddress][tokenId].state;
         if (state != 0) {
-            revert NftBook__ItemAlreadyListed(nftAddress, tokenId);
+            revert NftMarketplace__ItemAlreadyListed(nftAddress, tokenId);
         }
     }
 
@@ -47,7 +47,7 @@ contract NftBook is INftBook {
     function _isListed(address nftAddress, uint256 tokenId) internal view {
         uint256 state = s_listings[nftAddress][tokenId].state;
         if (state == 0) {
-            revert NftBook__ItemNotListed(nftAddress, tokenId);
+            revert NftMarketplace__ItemNotListed(nftAddress, tokenId);
         }
     }
 
@@ -68,20 +68,20 @@ contract NftBook is INftBook {
         IERC721 nft = IERC721(nftAddress);
         address owner = nft.ownerOf(tokenId);
         if (spender != owner) {
-            revert NftBook__NotOwner();
+            revert NftMarketplace__NotOwner();
         }
     }
 
     //=====================================================================================
     //                                                                       main functions
     //=====================================================================================
-    /// @inheritdoc INftBook
+    /// @inheritdoc INftMarketplace
     function listItem(address nftAddress, uint256 tokenId) external override {
         ItemListing memory listing = ItemListing(address(0), msg.sender, 0, 1);
         _listItem(nftAddress, tokenId, listing);
     }
 
-    /// @inheritdoc INftBook
+    /// @inheritdoc INftMarketplace
     function listSalableItem(
         address nftAddress,
         uint256 tokenId,
@@ -110,7 +110,7 @@ contract NftBook is INftBook {
         if (
             (listing.state == 2) && (nft.getApproved(tokenId) != address(this))
         ) {
-            revert NftBook__NotApprovedForMarketplace();
+            revert NftMarketplace__NotApprovedForMarketplace();
         }
 
         s_listings[nftAddress][tokenId] = listing;
@@ -158,7 +158,7 @@ contract NftBook is INftBook {
         // reverts if the NFT is salable and the owner has not approve this contract to transfer the NFT
         IERC721 nft = IERC721(nftAddress);
         if (nft.getApproved(tokenId) != address(this)) {
-            revert NftBook__NotApprovedForMarketplace();
+            revert NftMarketplace__NotApprovedForMarketplace();
         }
 
         listing.state = 2;
@@ -184,7 +184,11 @@ contract NftBook is INftBook {
         ItemListing memory listing = s_listings[nftAddress][tokenId];
         // reverts if not enough funds transferred
         if (msg.value < listing.minPrice) {
-            revert NftBook__PriceNotMet(nftAddress, tokenId, listing.minPrice);
+            revert NftMarketplace__PriceNotMet(
+                nftAddress,
+                tokenId,
+                listing.minPrice
+            );
         }
 
         s_proceeds[listing.owner] += msg.value;
@@ -200,7 +204,7 @@ contract NftBook is INftBook {
     function withdrawProceeds() external override {
         uint256 proceeds = s_proceeds[msg.sender];
         if (proceeds <= 0) {
-            revert NftBook__NoProceeds();
+            revert NftMarketplace__NoProceeds();
         }
 
         s_proceeds[msg.sender] = 0;
