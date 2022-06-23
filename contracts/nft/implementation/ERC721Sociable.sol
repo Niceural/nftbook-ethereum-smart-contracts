@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "./Context.sol";
+import "../../utils/Context.sol";
 import "./ERC165.sol";
 import "../interfaces/IERC721.sol";
 import "../interfaces/IERC721Metadata.sol";
@@ -10,13 +10,7 @@ import "../interfaces/IERC721Receiver.sol";
 import "../../utils/Strings.sol";
 import "../../utils/Address.sol";
 
-abstract contract ERC721Sociable is
-    Context,
-    ERC165,
-    IERC721,
-    IERC721Metadata,
-    IERC721Sociable
-{
+contract ERC721Sociable is Context, ERC165, IERC721Sociable {
     using Address for address;
     using Strings for uint256;
 
@@ -36,10 +30,10 @@ abstract contract ERC721Sociable is
     mapping(address => mapping(address => bool)) _operatorApprovals;
 
     /// @dev Initializes the contract by setting a `name` and a `symbol` to the token collection
-    /*constructor(string memory name_, string memory symbol_) {
+    constructor(string memory name_, string memory symbol_) {
         _name = name_;
         _symbol = symbol_;
-    }*/
+    }
 
     /// @dev See {IERC721-supportsInterface}.
     function supportsInterface(bytes4 interfaceId_)
@@ -109,6 +103,17 @@ abstract contract ERC721Sociable is
             return string(abi.encodePacked(base, _tokenURI));
         }
         return string(abi.encodePacked(base, tokenId.toString()));
+    }
+
+    function tokenData(uint256 tokenId)
+        public
+        view
+        virtual
+        override
+        returns (TokenData memory)
+    {
+        _requireMinted(tokenId);
+        return _tokenDatas[tokenId];
     }
 
     function _baseURI() internal view virtual returns (string memory) {
@@ -185,6 +190,14 @@ abstract contract ERC721Sociable is
             revert ERC721__NotOwnerNorApproved();
 
         _safeTransfer(from_, to_, tokenId_, data_);
+    }
+
+    function safeTransferFrom(
+        address from,
+        address to,
+        uint256 tokenId
+    ) public virtual override {
+        safeTransferFrom(from, to, tokenId, "");
     }
 
     function _safeTransfer(

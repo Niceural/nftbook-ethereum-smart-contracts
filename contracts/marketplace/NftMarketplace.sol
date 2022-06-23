@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.7;
 
-import "./INftMarketplace.sol";
+import "./interfaces/INftMarketplace.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 error NftMarketplace__NotApprovedForMarketplace();
